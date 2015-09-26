@@ -463,10 +463,11 @@ function! dispatch#compile_command(bang, args, count) abort
 
   let executable = matchstr(args, '\S\+')
 
+  let defaultformat = get(g:, 'dispatch_default_format', '%+I%.%#')
   call extend(request, {
         \ 'action': 'make',
         \ 'background': a:bang,
-        \ 'format': '%+I%.%#'
+        \ 'format': defaultformat,
         \ }, 'keep')
 
   if executable ==# '_'
