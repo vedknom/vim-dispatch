@@ -8,6 +8,12 @@ let g:autoloaded_dispatch = 1
 
 " Utility {{{1
 
+function! dispatch#mktemp() abort
+  let temp = tempname()
+  call writefile([], temp)
+  return temp
+endfunction
+
 function! dispatch#uniq(list) abort
   let i = 0
   let seen = {}
@@ -151,7 +157,7 @@ function! dispatch#isolate(keep, ...) abort
     endif
   endfor
   let command += a:000
-  let temp = tempname()
+  let temp = dispatch#mktemp()
   call writefile(command, temp)
   return 'env -i ' . join(map(copy(keep), 'v:val."=\"$". v:val ."\" "'), '') . &shell . ' ' . temp
 endfunction
@@ -270,7 +276,7 @@ function! dispatch#spawn(command, ...) abort
       let i += 1
     endwhile
   endif
-  let request.file = tempname()
+  let request.file = dispatch#mktemp()
   let s:files[request.file] = request
   let cd = exists('*haslocaldir') && haslocaldir() ? 'lcd' : 'cd'
   try
@@ -505,7 +511,7 @@ function! dispatch#compile_command(bang, args, count) abort
     silent! wall
   endif
   cclose
-  let request.file = tempname()
+  let request.file = dispatch#mktemp()
   let &errorfile = request.file
 
   let efm = &l:efm
