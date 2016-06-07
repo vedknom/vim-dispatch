@@ -13,7 +13,7 @@ function! dispatch#tmux#handle(request) abort
   if empty($TMUX) && empty(''.session) || !executable('tmux')
     return 0
   endif
-  if !empty(system('tmux has-session -t '.shellescape(session))[0:-2])
+  if !empty(session) && !empty(system('tmux has-session -t '.shellescape(session))[2:-2])
     return ''
   endif
 
