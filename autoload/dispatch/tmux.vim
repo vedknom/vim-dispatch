@@ -8,6 +8,11 @@ let g:autoloaded_dispatch_tmux = 1
 let s:waiting = {}
 let s:make_pane = tempname()
 
+function! s:no_pipepane()
+  let no_pipepane = get(g:, 'dispatch_tmux_no_pipepane')
+  return str2nr(no_pipepane)
+endfunction
+
 function! dispatch#tmux#handle(request) abort
   let session = get(g:, 'tmux_session', '')
   if empty($TMUX) && empty(''.session) || !executable('tmux')
@@ -33,12 +38,24 @@ function! dispatch#tmux#handle(request) abort
 endfunction
 
 function! dispatch#tmux#make(request) abort
+  let use_pipepane = !s:no_pipepane()
   let pipepane = (&shellpipe ==# '2>&1| tee' || &shellpipe ==# '|& tee')
         \ && a:request.format !~# '%\\[er]'
   let session = get(g:, 'tmux_session', '')
-  let script = dispatch#isolate(['TMUX', 'TMUX_PANE'],
-        \ dispatch#prepare_make(a:request, '', !pipepane))
+  let appendpipe = use_pipepane && !pipepane
 
+  let filter = 'sed'
+  let uname = system('uname')[0:-2]
+  if uname ==# 'Darwin'
+    let filter = '/usr/bin/sed -l'
+  elseif uname ==# 'Linux'
+    let filter .= ' -u'
+  endif
+  let filter .= " -e \"s/\r$//\" -e \"s/.*\r//\" -e \"s/\e\\[K//g\" -e \"s/.*\e\\[2K\e\\[0G//g\" -e \"s/\e\\[[0-9;]*m//g\" > ".a:request.file
+
+  let beforecmd = use_pipepane ? '' : 'script -q >(' . filter . ') '
+  let script = dispatch#isolate(['TMUX', 'TMUX_PANE'],
+        \ dispatch#prepare_make(a:request, '', appendpipe, beforecmd))
   let title = shellescape(get(a:request, 'title', get(a:request, 'compiler', 'make')))
   if get(a:request, 'background', 0)
     let cmd = 'new-window -d -n '.title
@@ -49,17 +66,9 @@ function! dispatch#tmux#make(request) abort
   endif
 
   let cmd .= ' ' . dispatch#shellescape('-P', '-t', session.':', 'exec ' . script)
-
-  let filter = 'sed'
-  let uname = system('uname')[0:-2]
-  if uname ==# 'Darwin'
-    let filter = '/usr/bin/sed -l'
-  elseif uname ==# 'Linux'
-    let filter .= ' -u'
-  endif
-  let filter .= " -e \"s/\r$//\" -e \"s/.*\r//\" -e \"s/\e\\[K//g\" -e \"s/.*\e\\[2K\e\\[0G//g\" -e \"s/\e\\[[0-9;]*m//g\" > ".a:request.file
-  call system('tmux ' . cmd . '|tee ' . s:make_pane .
-        \ (pipepane ? '|xargs -I {} tmux pipe-pane -t {} '.shellescape(filter) : ''))
+  let fullcmd = 'tmux ' . cmd . '|tee ' . s:make_pane .
+        \ (use_pipepane && pipepane ? '|xargs -I {} tmux pipe-pane -t {} '.shellescape(filter) : '')
+  call system(fullcmd)
 
   let pane = s:pane_id(get(readfile(s:make_pane, '', 1), 0, ''))
   if !empty(pane)
